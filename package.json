@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "cannon": "^0.6.2",
+    "dat.gui": "^0.7.9",
+    "enable3d": "^0.25.4",
+    "three": "^0.161.0",
+    "three-bvh-csg": "^0.0.16"
+  },
+  "devDependencies": {
+    "vite": "^5.1.1"
+  }
+}
