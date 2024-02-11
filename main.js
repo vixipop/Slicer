@@ -99,7 +99,7 @@ scene.add(hemiLight);
 //Raycasting and mouse drag events
 let startPoint;
 let endPoint;
-// let cuttingPlane;
+let cuttingPlane;
 
 document.addEventListener("mousedown", onMouseDown, false);
 document.addEventListener("mousemove", onMouseMove, false);
@@ -114,45 +114,43 @@ function onMouseDown(event) {
   endPoint = startPoint.clone();
 }
 
-let planeProxyClip;
-
 function onMouseMove(event) {
   if (!startPoint) return;
   mouse = getMouseCoordinates(event.clientX, event.clientY);
   endPoint = getIntersectionPoint(mouse);
 
-  // if (cuttingPlane) {
-  //   scene.remove(cuttingPlane);
-  // }
+  if (cuttingPlane) {
+    scene.remove(cuttingPlane);
+  }
 
-  const planeNormal = new THREE.Vector3()
+  const direction = new THREE.Vector3()
     .subVectors(endPoint, startPoint)
     .normalize();
-  const planeConstant = new THREE.Vector3()
+  const distance = new THREE.Vector3()
     .subVectors(endPoint, startPoint)
     .length();
 
   //Cutting Plane
-  planeProxyClip = new THREE.BoxGeometry(1000, 1000, 1000);
-  planeProxyClip.translate(0, 0, 499.9 - planeConstant);
-  planeProxyClip.lookAt(planeNormal);
+  // planeProxyClip = new THREE.BoxGeometry(1000, 1000, 1000);
+  // planeProxyClip.translate(0, 0, 499.9 - planeConstant);
+  // planeProxyClip.lookAt(planeNormal);
 
-  // cuttingPlane = new THREE.Mesh(
-  //   new THREE.PlaneGeometry(10, 10),
-  //   new THREE.MeshBasicMaterial({
-  //     color: 0xff0000,
-  //     side: THREE.DoubleSide,
-  //     transparent: true,
-  //     opacity: 0.5,
-  //   })
-  // );
-  // cuttingPlane.position.x = (endPoint.x + startPoint.x) / 2;
-  // cuttingPlane.position.y = (endPoint.y + startPoint.y) / 2;
-  // cuttingPlane.position.z = (endPoint.z + startPoint.z) / 2;
+  cuttingPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(10, 10),
+    new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.5,
+    })
+  );
+  cuttingPlane.position.x = (endPoint.x + startPoint.x) / 2;
+  cuttingPlane.position.y = (endPoint.y + startPoint.y) / 2;
+  cuttingPlane.position.z = (endPoint.z + startPoint.z) / 2;
 
-  // cuttingPlane.lookAt(planeNormal);
-  // cuttingPlane.scale.set(1, planeConstant, 1);
-  // scene.add(cuttingPlane);
+  cuttingPlane.lookAt(direction);
+  cuttingPlane.scale.set(1, distance, 1);
+  scene.add(cuttingPlane);
 }
 
 function onMouseUp(event) {
@@ -181,12 +179,12 @@ function getIntersectionPoint(mouse) {
 }
 
 function performCut() {
-  if (!objectToCut || !planeProxyClip) return;
+  if (!objectToCut || !cuttingPlane) return;
 
   const plane = new THREE.Plane();
   const direction = new THREE.Vector3(0, 1, 0);
-  planeProxyClip.getWorldDirection(direction); //Gives normal ?
-  plane.setFromCoplanarPoints(direction, planeProxyClip.position);
+  cuttingPlane.getWorldDirection(direction); //Gives normal ?
+  plane.setFromCoplanarPoints(direction, cuttingPlane.position);
 
   const cutPieces = cutPlane(plane);
   console.log("This is WHAT IT HAS CUT INTO ", cutPieces);
