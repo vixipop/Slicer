@@ -13,8 +13,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 ); //fov, aspect ratio, near, far
-camera.position.x = 1;
-camera.position.y = 2;
+camera.position.x = 0;
+camera.position.y = 1;
 camera.position.z = 5;
 
 // GUI
@@ -27,47 +27,23 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
 document.body.appendChild(canvas);
 
-//Physics World
-const world = new CANNON.World();
-world.gravity.set(0, -9.82, 0);
-
-//Materials
-const defaultMaterial = new CANNON.Material("concrete");
-
-const defaultContactMaterial = new CANNON.ContactMaterial(
-  defaultMaterial,
-  defaultMaterial,
-  {
-    friction: 0.1,
-    restitution: 0.7,
-  }
-);
-world.addContactMaterial(defaultContactMaterial);
-world.defaultContactMaterial = defaultContactMaterial;
-
-//Physics Sphere
-const sphereShape = new CANNON.Sphere(1);
-const sphereBody = new CANNON.Body({
-  mass: 1,
-  position: new CANNON.Vec3(0, 3, 0),
-  shape: sphereShape,
-});
-world.addBody(sphereBody);
-
-//Physics Floor
-const floorShape = new CANNON.Plane();
-const floorBody = new CANNON.Body();
-floorBody.addShape(floorShape);
-floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5);
-world.addBody(floorBody);
-
 // ThreeJS Sphere
+// const objectToCut = new THREE.Mesh(
+//   new THREE.SphereGeometry(1),
+//   new THREE.MeshPhongMaterial({ color: 0xffff8fb2 })
+// );
+// objectToCut.position.set(0, 1, 0);
+// console.log(objectToCut.getAttributes("position"));
+// scene.add(objectToCut);
+
+const objectToCutGeom = new THREE.SphereGeometry(1);
 const objectToCut = new THREE.Mesh(
-  new THREE.SphereGeometry(1),
+  objectToCutGeom,
   new THREE.MeshPhongMaterial({ color: 0xffff8fb2 })
 );
 objectToCut.position.set(0, 1, 0);
 scene.add(objectToCut);
+// console.log("ObjectToCut Log", objectToCutGeom.attributes.position);
 
 //Knife
 // const loader = new GLTFLoader();
@@ -90,7 +66,7 @@ floor.rotateX(-Math.PI / 2);
 
 scene.add(floor);
 //Controls
-// const controls = new OrbitControls(camera, canvas);
+const controls = new OrbitControls(camera, canvas);
 
 //Light
 const hemiLight = new THREE.HemisphereLight(0xffff61c5, 0xff7b61ff);
@@ -107,22 +83,38 @@ document.addEventListener("mouseup", onMouseUp, false);
 const raycaster = new THREE.Raycaster();
 let mouse = new THREE.Vector2();
 
+const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
+const points = [];
+let lineGeometry;
+let line;
+
 function onMouseDown(event) {
   mouse = getMouseCoordinates(event.clientX, event.clientY);
   startPoint = getIntersectionPoint(mouse);
   endPoint = startPoint.clone();
+
+  //line
+  points.push(startPoint.x, startPoint.y, startPoint.z);
+  lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  line = new THREE.Mesh(lineMaterial, lineGeometry);
+  scene.add(line);
 }
 
 function onMouseMove(event) {
   if (!startPoint) return;
   mouse = getMouseCoordinates(event.clientX, event.clientY);
   endPoint = getIntersectionPoint(mouse);
+
+  points.push(endPoint.x, endPoint.y, endPoint.z);
+  lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  line = new THREE.Mesh(lineMaterial, lineGeometry);
 }
 
 function onMouseUp(event) {
   if (!startPoint) return;
 
   performCut(startPoint, endPoint);
+  scene.remove(line);
 
   startPoint = null;
   endPoint = null;
@@ -145,47 +137,78 @@ function getIntersectionPoint(mouse) {
 }
 
 function performCut(startPoint, endPoint) {
+  //OG plane used to find normal and constant
   const newPlane = new THREE.Plane();
   newPlane.setFromCoplanarPoints(startPoint, endPoint, camera.position);
+
+  //Cutting plane 1
   const cuttingPlane = new THREE.BoxGeometry(1000, 1000, 1000);
   cuttingPlane.translate(0, 0, 499.9 - newPlane.constant);
   cuttingPlane.lookAt(newPlane.normal);
-  console.log("Cutting Plane position", cuttingPlane.attributes.position);
 
-  const postCutGeometry = cutPlane(cuttingPlane);
-  console.log("Result.geometry position", postCutGeometry.attributes.position);
-  const postCutMaterial = new THREE.MeshPhongMaterial({ color: 0xffff8fb2 });
-  const postCutObject = new THREE.Mesh(postCutGeometry, postCutMaterial);
-  scene.add(postCutObject);
+  //CuttingPlane2
+  const cuttingPlaneOther = new THREE.BoxGeometry(1000, 1000, 1000);
+  cuttingPlaneOther.translate(0, 0, 499.9 + newPlane.constant);
+  cuttingPlaneOther.lookAt(newPlane.normal.clone().multiplyScalar(-1));
+
+  //Post cut split object
+  const [postCutTopGeometry, postCutBottomGeometry] = cutPlane(
+    cuttingPlane,
+    cuttingPlaneOther
+  );
+
+  const postCutTopObject = new THREE.Mesh(
+    postCutTopGeometry,
+    new THREE.MeshPhongMaterial({ color: 0xffff8fb2 })
+  );
+  postCutTopObject.position.y = 1;
+  // postCutTopObject.position.x -= 0.2;
+  const postCutBottomObject = new THREE.Mesh(
+    postCutBottomGeometry,
+    new THREE.MeshPhongMaterial({ color: 0xffff8fb2 })
+  );
+  postCutBottomObject.position.y = 1;
+  // postCutBottomObject.position.x += 0.2;
+
+  scene.add(postCutTopObject, postCutBottomObject);
+  scene.remove(objectToCut);
+
+  // console.log("Post Cut Geom", postCutGeometry);
+  // console.log("Result.geometry position", postCutGeometry.attributes.position);
+  // const postCutMaterial = new THREE.MeshPhongMaterial({ color: 0xffff8fb2 });
+  // const postCutObject = new THREE.Mesh(postCutGeometry, postCutMaterial);
+  // postCutObject.position.set(0, 2, 0);
+
+  // scene.add(postCutObject);
+  // scene.remove(objectToCut);
 }
 
 // Cutting Method
-function cutPlane(cuttingPlane) {
-  const brush1 = new Brush(objectToCut.geometry);
-  brush1.updateMatrixWorld();
-  const brush2 = new Brush(cuttingPlane.geometry);
-  brush1.updateMatrixWorld();
+
+function cutPlane(cuttingPlane, cuttingPlaneOther) {
+  const topSlice = new Brush(cuttingPlane);
+  topSlice.updateMatrixWorld();
+
+  const bottomSlice = new Brush(cuttingPlaneOther);
+  bottomSlice.updateMatrixWorld();
+  bottomSlice.geometry.computeVertexNormals();
+
+  const meshBrush = new Brush(objectToCutGeom);
+  meshBrush.updateMatrixWorld();
 
   const evaluator = new Evaluator();
-  const result = evaluator.evaluate(brush1, brush2, SUBTRACTION);
-  console.log(result.geometry);
-  return result.geometry;
+  const topResult = evaluator.evaluate(meshBrush, topSlice, SUBTRACTION);
+  const bottomResult = evaluator.evaluate(meshBrush, bottomSlice, SUBTRACTION);
+  // console.log("RESULT GEOMETRY", topResult.geometry, bottomResult.geometry);
+  return [topResult.geometry, bottomResult.geometry];
 }
 //Render loop
 const clock = new THREE.Clock();
-let oldElapsedTime = 0;
-
 function animate() {
   //Delta
   const elapsedTime = clock.getElapsedTime();
-  const deltaTime = elapsedTime - oldElapsedTime;
-  oldElapsedTime = elapsedTime;
 
-  //update physics world
-  world.step(1 / 60, deltaTime, 3);
-  objectToCut.position.copy(sphereBody.position);
-
-  // controls.update();
+  controls.update();
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
